@@ -160,26 +160,50 @@ async function loadWorkbookData(file) {
 
 function getGoogleSheetExportUrl(url) {
   const parsed = new URL(url);
-  const idMatch = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+  const sharedSheetMatch = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+  const publishedSheetMatch = parsed.pathname.match(/\/spreadsheets\/d\/e\/([^/]+)/);
+  const gidMatch = parsed.hash.match(/(?:^#|[?&])gid=(\d+)/);
+  const gid = parsed.searchParams.get('gid') || (gidMatch ? gidMatch[1] : '0');
 
-  if (!idMatch) {
+  if (publishedSheetMatch) {
+    const publishedSheetId = publishedSheetMatch[1];
+    return `https://docs.google.com/spreadsheets/d/e/${publishedSheetId}/pub?output=csv&gid=${encodeURIComponent(gid)}`;
+  }
+
+  if (!sharedSheetMatch) {
     throw new Error('Paste a Google Sheets sharing link.');
   }
 
-  const sheetId = idMatch[1];
-  const gid = parsed.searchParams.get('gid') || '0';
+  const sheetId = sharedSheetMatch[1];
   return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(gid)}`;
 }
 
 async function loadGoogleSheet(url) {
   const exportUrl = getGoogleSheetExportUrl(url);
-  const response = await fetch(exportUrl);
+  let response;
+
+  try {
+    response = await fetch(exportUrl);
+  } catch {
+    throw new Error(
+      'Google blocked this sheet from browser import. In Google Sheets, use File > Share > Publish to web, choose CSV, then paste the published link.'
+    );
+  }
 
   if (!response.ok) {
-    throw new Error('Google Sheet could not be loaded. Check that anyone with the link can view it.');
+    throw new Error(
+      'Google Sheet could not be loaded. Use File > Share > Publish to web, choose CSV, then paste the published link.'
+    );
   }
 
   const csv = await response.text();
+
+  if (/<!doctype html|<html/i.test(csv)) {
+    throw new Error(
+      'Google returned a sign-in or access page. Use File > Share > Publish to web, choose CSV, then paste the published link.'
+    );
+  }
+
   const workbook = XLSX.read(csv, { type: 'string' });
   const payload = createPreviewData(workbook, 'Google Sheet');
 
