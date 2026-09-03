@@ -1,0 +1,171 @@
+:root {
+  color-scheme: light;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #f6f9ff 0%, #e9efff 100%);
+  color: #1b2430;
+}
+
+.card {
+  width: min(96vw, 1100px);
+  background: #ffffff;
+  border: 1px solid #d4def1;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 12px 30px rgba(24, 44, 90, 0.12);
+}
+
+h1 {
+  margin-top: 0;
+}
+
+form {
+  display: grid;
+  gap: 12px;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+input[type='file'] {
+  padding: 10px;
+  border: 1px solid #bdcbe6;
+  border-radius: 10px;
+}
+
+button {
+  border: none;
+  border-radius: 10px;
+  background: #1e4bd1;
+  color: white;
+  padding: 12px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #173cab;
+}
+
+#status {
+  margin: 12px 0 0;
+  min-height: 1.2em;
+  color: #30435f;
+}
+
+#previewSection {
+  margin-top: 18px;
+}
+
+#previewMeta {
+  margin: 0 0 12px;
+  color: #30435f;
+  font-size: 0.95rem;
+}
+
+.previewControls {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.controlGroup {
+  display: grid;
+  gap: 6px;
+}
+
+.previewControls label {
+  font-weight: 600;
+  color: #21344d;
+}
+
+.previewControls select {
+  padding: 10px;
+  border: 1px solid #bdcbe6;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.previewControls input[type='text'] {
+  padding: 10px;
+  border: 1px solid #bdcbe6;
+  border-radius: 10px;
+}
+
+#filterMeta {
+  margin: 0;
+  font-size: 0.92rem;
+  color: #30435f;
+}
+
+.tableWrap {
+  overflow: auto;
+  max-height: 60vh;
+  border: 1px solid #d4def1;
+  border-radius: 12px;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  background: #fff;
+}
+
+th,
+td {
+  border-bottom: 1px solid #e3e9f7;
+  padding: 8px 10px;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: #eef3ff;
+  z-index: 1;
+}
+
+tbody tr:nth-child(even) {
+  background: #fafcff;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .card {
+    padding: 16px;
+  }
+
+  button {
+    width: 100%;
+  }
+}
+
+@media (min-width: 900px) {
+  .previewControls {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: end;
+  }
+
+  #filterMeta {
+    grid-column: 1 / -1;
+  }
+}

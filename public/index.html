@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Excel External Reference Id Splitter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="card">
+      <h1>Excel Splitter</h1>
+      <p>Upload an Excel file and split rows by External Reference Id.</p>
+
+      <form id="uploadForm">
+        <input type="file" id="excelFile" name="excelFile" accept=".xlsx,.xls" required />
+        <div class="actions">
+          <button type="submit" name="action" value="preview">Preview Table</button>
+          <button type="submit" name="action" value="split">Split & Download ZIP</button>
+        </div>
+      </form>
+
+      <p id="status"></p>
+
+      <section id="previewSection" class="hidden">
+        <h2>Table Preview</h2>
+        <p id="previewMeta"></p>
+        <div class="previewControls">
+          <div class="controlGroup">
+            <label for="idFilter">External Reference Id</label>
+            <select id="idFilter"></select>
+          </div>
+          <div class="controlGroup">
+            <label for="headerFilter">Header Field</label>
+            <select id="headerFilter"></select>
+          </div>
+          <div class="controlGroup">
+            <label for="searchInput">Search Value</label>
+            <input
+              type="text"
+              id="searchInput"
+              placeholder="Type to filter rows by selected header"
+            />
+          </div>
+          <p id="filterMeta"></p>
+        </div>
+        <div class="tableWrap">
+          <table id="previewTable"></table>
+        </div>
+      </section>
+    </main>
+
+    <script src="script.js"></script>
+  </body>
+</html>
