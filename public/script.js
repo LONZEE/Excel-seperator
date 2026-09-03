@@ -45,6 +45,43 @@ function sanitizeFileName(value) {
     .slice(0, 100) || 'missing_external_reference_id';
 }
 
+function isSummableMoneyColumn(header) {
+  return /(amount|balance|premium|charge|total|payment|paid|due|cost|price|fee|credit|debit)/i.test(
+    String(header || '')
+  );
+}
+
+function parseNumericValue(value) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  const cleaned = String(value ?? '')
+    .trim()
+    .replace(/[$,\s]/g, '')
+    .replace(/[()]/g, '');
+
+  if (!cleaned) {
+    return null;
+  }
+
+  const isNegative = /^\(.*\)$/.test(String(value ?? '').trim()) || /^-/.test(cleaned);
+  const parsed = Number.parseFloat(cleaned.replace(/^-/, ''));
+
+  if (!Number.isFinite(parsed)) {
+    return null;
+  }
+
+  return isNegative ? -parsed : parsed;
+}
+
+function formatAmount(value) {
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
+}
+
 function getFileKey(file) {
   return [file.name, file.size, file.lastModified].join(':');
 }
@@ -200,9 +237,37 @@ function renderTable(headers, rows) {
     tbody.appendChild(tr);
   }
 
+  const tfoot = document.createElement('tfoot');
+  const footerRow = document.createElement('tr');
+  let hasSummableColumn = false;
+
+  for (const [index, header] of visibleHeaders.entries()) {
+    const td = document.createElement('td');
+
+    if (index === 0) {
+      td.textContent = 'Totals';
+    }
+
+    if (isSummableMoneyColumn(header)) {
+      const total = rows.reduce((sum, row) => {
+        const numericValue = parseNumericValue(row[header]);
+        return numericValue === null ? sum : sum + numericValue;
+      }, 0);
+
+      td.textContent = formatAmount(total);
+      hasSummableColumn = true;
+    }
+
+    footerRow.appendChild(td);
+  }
+
   previewTable.innerHTML = '';
   previewTable.appendChild(thead);
   previewTable.appendChild(tbody);
+  if (hasSummableColumn) {
+    tfoot.appendChild(footerRow);
+    previewTable.appendChild(tfoot);
+  }
 }
 
 function renderColumnOptions(headers) {
