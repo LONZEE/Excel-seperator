@@ -145,6 +145,12 @@ body {
   font-size: 0.9rem;
 }
 
+.import-help {
+  margin-top: 0.45rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .preview-panel {
   margin-top: 1.25rem;
   overflow: hidden;

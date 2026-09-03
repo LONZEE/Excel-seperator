@@ -12,6 +12,8 @@ const showAllColumnsButton = document.getElementById('showAllColumns');
 const hideAllColumnsButton = document.getElementById('hideAllColumns');
 const presetIdColumnsButton = document.getElementById('presetIdColumns');
 const presetCustomerColumnsButton = document.getElementById('presetCustomerColumns');
+const googleSheetUrlInput = document.getElementById('googleSheetUrl');
+const loadGoogleSheetButton = document.getElementById('loadGoogleSheet');
 
 let previewData = null;
 let loadedFileKey = null;
@@ -90,17 +92,9 @@ async function readFileAsArrayBuffer(file) {
   return file.arrayBuffer();
 }
 
-async function loadWorkbookData(file) {
-  const fileKey = getFileKey(file);
-  if (previewData && loadedFileKey === fileKey) {
-    return previewData;
-  }
-
-  const buffer = await readFileAsArrayBuffer(file);
-  const workbook = XLSX.read(buffer, { type: 'array' });
-
+function createPreviewData(workbook, sourceName) {
   if (!workbook.SheetNames.length) {
-    throw new Error('Excel file has no sheets.');
+    throw new Error('The file has no sheets.');
   }
 
   const firstSheetName = workbook.SheetNames[0];
@@ -108,7 +102,7 @@ async function loadWorkbookData(file) {
   const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
 
   if (!rows.length) {
-    throw new Error('Excel sheet is empty.');
+    throw new Error('The selected sheet is empty.');
   }
 
   const headers = Object.keys(rows[0]);
@@ -138,8 +132,8 @@ async function loadWorkbookData(file) {
     idGroups.get(key).count += 1;
   }
 
-  const payload = {
-    sheetName: firstSheetName,
+  return {
+    sheetName: sourceName || firstSheetName,
     totalRows: rows.length,
     uniqueExternalReferenceIds: idGroups.size,
     targetHeader,
@@ -147,9 +141,50 @@ async function loadWorkbookData(file) {
     externalReferenceIds: Array.from(idGroups.values()).sort((a, b) => a.label.localeCompare(b.label)),
     rows
   };
+}
+
+async function loadWorkbookData(file) {
+  const fileKey = getFileKey(file);
+  if (previewData && loadedFileKey === fileKey) {
+    return previewData;
+  }
+
+  const buffer = await readFileAsArrayBuffer(file);
+  const workbook = XLSX.read(buffer, { type: 'array' });
+  const payload = createPreviewData(workbook, file.name);
 
   previewData = payload;
   loadedFileKey = fileKey;
+  return payload;
+}
+
+function getGoogleSheetExportUrl(url) {
+  const parsed = new URL(url);
+  const idMatch = parsed.pathname.match(/\/spreadsheets\/d\/([^/]+)/);
+
+  if (!idMatch) {
+    throw new Error('Paste a Google Sheets sharing link.');
+  }
+
+  const sheetId = idMatch[1];
+  const gid = parsed.searchParams.get('gid') || '0';
+  return `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(gid)}`;
+}
+
+async function loadGoogleSheet(url) {
+  const exportUrl = getGoogleSheetExportUrl(url);
+  const response = await fetch(exportUrl);
+
+  if (!response.ok) {
+    throw new Error('Google Sheet could not be loaded. Check that anyone with the link can view it.');
+  }
+
+  const csv = await response.text();
+  const workbook = XLSX.read(csv, { type: 'string' });
+  const payload = createPreviewData(workbook, 'Google Sheet');
+
+  previewData = payload;
+  loadedFileKey = `google-sheet:${exportUrl}`;
   return payload;
 }
 
@@ -445,6 +480,26 @@ presetCustomerColumnsButton.addEventListener('click', () => {
   setVisibleColumns((header) => isCustomerColumn(header));
 });
 
+loadGoogleSheetButton.addEventListener('click', async () => {
+  const url = googleSheetUrlInput.value.trim();
+
+  if (!url) {
+    statusEl.textContent = 'Paste a Google Sheets sharing link first.';
+    return;
+  }
+
+  statusEl.textContent = 'Loading Google Sheet...';
+
+  try {
+    const payload = await loadGoogleSheet(url);
+    renderPreview(payload);
+    statusEl.textContent = `Google Sheet loaded. ${payload.rows.length} rows ready.`;
+  } catch (error) {
+    clearPreview();
+    statusEl.textContent = error.message;
+  }
+});
+
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
@@ -458,8 +513,6 @@ form.addEventListener('submit', async (event) => {
 
   const action = event.submitter?.value || 'split';
   statusEl.textContent = action === 'preview' ? 'Loading preview...' : 'Processing...';
-
-  const formData = new FormData();
 
   try {
     const payload = await loadWorkbookData(file);

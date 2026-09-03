@@ -26,8 +26,8 @@
           <form id="uploadForm">
             <div class="row g-3 align-items-end">
               <div class="col-lg">
-                <label for="excelFile" class="form-label">Excel workbook</label>
-                <input class="form-control form-control-lg" type="file" id="excelFile" accept=".xlsx,.xls" required />
+                <label for="excelFile" class="form-label">Excel or CSV file</label>
+                <input class="form-control form-control-lg" type="file" id="excelFile" accept=".xlsx,.xls,.csv,text/csv" required />
               </div>
               <div class="col-lg-auto">
                 <div class="actions">
@@ -38,6 +38,15 @@
             </div>
           </form>
           <p id="status" class="status-message mb-0" aria-live="polite"></p>
+          <div class="sheet-import mt-3 pt-3 border-top">
+            <label for="googleSheetUrl" class="form-label">Or load a public Google Sheet</label>
+            <div class="input-group">
+              <span class="input-group-text"><i class="bi bi-google"></i></span>
+              <input class="form-control" type="url" id="googleSheetUrl" placeholder="Paste a Google Sheets sharing link" />
+              <button class="btn btn-outline-primary" type="button" id="loadGoogleSheet">Load sheet</button>
+            </div>
+            <p class="import-help mb-0">The sheet must be shared as “Anyone with the link can view.”</p>
+          </div>
         </section>
 
         <section id="previewSection" class="preview-panel hidden">
