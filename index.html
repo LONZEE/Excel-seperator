@@ -1,11 +1,14 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet" />
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Excel External Reference Id Splitter</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="public/styles.css" />
+  </head>
+  <body>
     <main class="app-shell container-fluid px-3 px-md-4 py-4 py-md-5">
       <section class="workspace mx-auto">
         <header class="app-header d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
@@ -20,72 +23,65 @@
         </header>
 
         <section class="upload-panel">
-          <div class="row g-3 align-items-end">
-            <div class="col-lg">
-              <label for="excelFile" class="form-label">Excel workbook</label>
-              <input class="form-control form-control-lg" type="file" id="excelFile" name="excelFile" accept=".xlsx,.xls" required form="uploadForm" />
+          <form id="uploadForm">
+            <div class="row g-3 align-items-end">
+              <div class="col-lg">
+                <label for="excelFile" class="form-label">Excel workbook</label>
+                <input class="form-control form-control-lg" type="file" id="excelFile" accept=".xlsx,.xls" required />
+              </div>
+              <div class="col-lg-auto">
+                <div class="actions">
+                  <button class="btn btn-outline-primary" type="submit" name="action" value="preview"><i class="bi bi-table me-2"></i>Preview</button>
+                  <button class="btn btn-primary" type="submit" name="action" value="split"><i class="bi bi-file-zip me-2"></i>Split and Download</button>
+                </div>
+              </div>
             </div>
-            <div class="col-lg-auto">
-              <form id="uploadForm" class="actions">
-                <button class="btn btn-outline-primary" type="submit" name="action" value="preview"><i class="bi bi-table me-2"></i>Preview</button>
-                <button class="btn btn-primary" type="submit" name="action" value="split"><i class="bi bi-file-zip me-2"></i>Split and Download</button>
-              </form>
-            </div>
-          </div>
+          </form>
           <p id="status" class="status-message mb-0" aria-live="polite"></p>
         </section>
-        <div class="actions">
+
         <section id="previewSection" class="preview-panel hidden">
-          <div class="panel-heading d-flex flex-column flex-md-row justify-content-between align-items-md-start gap-2">
-            <div>
-              <p class="eyebrow mb-1">WORKBOOK PREVIEW</p>
-              <h2 class="h4 mb-1">Explore your data</h2>
-              <p id="previewMeta" class="preview-meta mb-0"></p>
-            </div>
+          <div class="panel-heading">
+            <p class="eyebrow mb-1">WORKBOOK PREVIEW</p>
+            <h2 class="h4 mb-1">Explore your data</h2>
+            <p id="previewMeta" class="preview-meta mb-0"></p>
           </div>
           <div class="previewControls">
-        <h2>Table Preview</h2>
-        <p id="previewMeta"></p>
-            <select id="idFilter" class="form-select"></select>
-          <div class="controlGroup">
-            <label for="idFilter">External Reference Id</label>
-            <select id="idFilter"></select>
-            <select id="headerFilter" class="form-select"></select>
-          <div class="controlGroup">
-            <label for="headerFilter">Header Field</label>
-            <select id="headerFilter"></select>
-            <div class="input-group">
-              <span class="input-group-text"><i class="bi bi-search"></i></span>
-              <input class="form-control"
-          <div class="controlGroup">
-            <label for="searchInput">Search Value</label>
-            <input
-              />
+            <div class="controlGroup">
+              <label for="idFilter">External Reference Id</label>
+              <select id="idFilter" class="form-select"></select>
             </div>
-              id="searchInput"
-              placeholder="Type to filter rows by selected header"
-            />
-          </div>
-          <div class="controlGroup columnPickerGroup">
-                <button class="btn btn-sm btn-light" type="button" id="showAllColumns">Show all</button>
-                <button class="btn btn-sm btn-light" type="button" id="hideAllColumns">Hide all</button>
-              <div class="columnPickerActions">
-                <button type="button" id="showAllColumns">Show All</button>
-                <button type="button" id="hideAllColumns">Hide All</button>
-              <button class="btn btn-sm btn-outline-secondary" type="button" id="presetIdColumns">IDs only</button>
-              <button class="btn btn-sm btn-outline-secondary" type="button" id="presetCustomerColumns">Customer columns</button>
-            <div class="presetActions">
-              <button type="button" id="presetIdColumns">IDs Only</button>
-              <button type="button" id="presetCustomerColumns">Customer Columns</button>
+            <div class="controlGroup">
+              <label for="headerFilter">Header Field</label>
+              <select id="headerFilter" class="form-select"></select>
             </div>
+            <div class="controlGroup">
+              <label for="searchInput">Search Value</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input class="form-control" type="text" id="searchInput" placeholder="Type to filter rows by selected header" />
+              </div>
+            </div>
+            <div class="controlGroup columnPickerGroup">
+              <div class="columnPickerHeader">
+                <label>Visible Columns</label>
+                <div class="columnPickerActions">
+                  <button class="btn btn-sm btn-light" type="button" id="showAllColumns">Show all</button>
+                  <button class="btn btn-sm btn-light" type="button" id="hideAllColumns">Hide all</button>
+                </div>
+              </div>
+              <div class="presetActions">
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="presetIdColumns">IDs only</button>
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="presetCustomerColumns">Customer columns</button>
+              </div>
+              <div id="columnOptions" class="columnOptions"></div>
+            </div>
+            <p id="filterMeta" class="mb-0"></p>
           </div>
           <div class="tableWrap">
             <table id="previewTable" class="table table-hover mb-0"></table>
           </div>
         </section>
-      </section>
-    </main>
-        </div>
       </section>
     </main>
 

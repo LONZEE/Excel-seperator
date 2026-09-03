@@ -161,7 +161,7 @@ function downloadBlob(blob, fileName) {
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
-  window.URL.revokeObjectURL(url);
+  window.setTimeout(() => window.URL.revokeObjectURL(url), 1000);
 }
 
 async function splitWorkbook(payload) {
