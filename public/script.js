@@ -9,6 +9,7 @@ const searchInput = document.getElementById('searchInput');
 const filterMeta = document.getElementById('filterMeta');
 
 let previewData = null;
+let loadedFileKey = null;
 
 function normalizeExternalReferenceValue(value) {
   const raw = String(value || '').trim();
@@ -18,8 +19,144 @@ function normalizeExternalReferenceValue(value) {
   return raw.toLowerCase();
 }
 
+function formatExternalReferenceValue(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return 'MISSING_EXTERNAL_REFERENCE_ID';
+  }
+
+  if (/^\d+(\.\d+)?$/.test(raw)) {
+    return raw;
+  }
+
+  return raw.toLowerCase();
+}
+
+function sanitizeFileName(value) {
+  return String(value)
+    .trim()
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 100) || 'missing_external_reference_id';
+}
+
+function getFileKey(file) {
+  return [file.name, file.size, file.lastModified].join(':');
+}
+
+async function readFileAsArrayBuffer(file) {
+  return file.arrayBuffer();
+}
+
+async function loadWorkbookData(file) {
+  const fileKey = getFileKey(file);
+  if (previewData && loadedFileKey === fileKey) {
+    return previewData;
+  }
+
+  const buffer = await readFileAsArrayBuffer(file);
+  const workbook = XLSX.read(buffer, { type: 'array' });
+
+  if (!workbook.SheetNames.length) {
+    throw new Error('Excel file has no sheets.');
+  }
+
+  const firstSheetName = workbook.SheetNames[0];
+  const firstSheet = workbook.Sheets[firstSheetName];
+  const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '' });
+
+  if (!rows.length) {
+    throw new Error('Excel sheet is empty.');
+  }
+
+  const headers = Object.keys(rows[0]);
+  const targetHeader = headers.find((header) => {
+    const normalized = String(header || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '');
+
+    return normalized === 'externalreferenceid' || normalized === 'externalreference';
+  });
+
+  if (!targetHeader) {
+    throw new Error('Could not find a column named External Reference Id.');
+  }
+
+  const idGroups = new Map();
+
+  for (const row of rows) {
+    const key = normalizeExternalReferenceValue(row[targetHeader]);
+    const label = formatExternalReferenceValue(row[targetHeader]);
+
+    if (!idGroups.has(key)) {
+      idGroups.set(key, { key, label, count: 0 });
+    }
+
+    idGroups.get(key).count += 1;
+  }
+
+  const payload = {
+    sheetName: firstSheetName,
+    totalRows: rows.length,
+    uniqueExternalReferenceIds: idGroups.size,
+    targetHeader,
+    headers,
+    externalReferenceIds: Array.from(idGroups.values()).sort((a, b) => a.label.localeCompare(b.label)),
+    rows
+  };
+
+  previewData = payload;
+  loadedFileKey = fileKey;
+  return payload;
+}
+
+function downloadBlob(blob, fileName) {
+  const url = window.URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+async function splitWorkbook(payload) {
+  const grouped = new Map();
+
+  for (const row of payload.rows) {
+    const key = normalizeExternalReferenceValue(row[payload.targetHeader]);
+    const label = formatExternalReferenceValue(row[payload.targetHeader]);
+
+    if (!grouped.has(key)) {
+      grouped.set(key, { label, rows: [] });
+    }
+
+    grouped.get(key).rows.push(row);
+  }
+
+  const zip = new JSZip();
+
+  for (const group of grouped.values()) {
+    const workbook = XLSX.utils.book_new();
+    const sheet = XLSX.utils.json_to_sheet(group.rows);
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Rows');
+
+    const output = XLSX.write(workbook, {
+      type: 'array',
+      bookType: 'xlsx'
+    });
+
+    zip.file(`${sanitizeFileName(group.label)}.xlsx`, output);
+  }
+
+  return zip.generateAsync({ type: 'blob' });
+}
+
 function clearPreview() {
   previewData = null;
+  loadedFileKey = null;
   previewMeta.textContent = '';
   filterMeta.textContent = '';
   idFilter.innerHTML = '';
@@ -160,17 +297,6 @@ searchInput.addEventListener('input', () => {
   renderFilteredRows();
 });
 
-async function parseErrorMessage(response, fallback) {
-  let message = fallback;
-  try {
-    const payload = await response.json();
-    message = payload.error || message;
-  } catch {
-    // Ignore JSON parse errors for non-JSON error responses.
-  }
-  return message;
-}
-
 form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
@@ -186,45 +312,18 @@ form.addEventListener('submit', async (event) => {
   statusEl.textContent = action === 'preview' ? 'Loading preview...' : 'Processing...';
 
   const formData = new FormData();
-  formData.append('excelFile', file);
 
   try {
+    const payload = await loadWorkbookData(file);
+
     if (action === 'preview') {
-      const response = await fetch('/preview', {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        const message = await parseErrorMessage(response, 'Preview failed.');
-        throw new Error(message);
-      }
-
-      const payload = await response.json();
       renderPreview(payload);
       statusEl.textContent = `Preview ready. Loaded ${payload.rows.length} rows.`;
       return;
     }
 
-    const response = await fetch('/split', {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!response.ok) {
-      const message = await parseErrorMessage(response, 'Upload failed.');
-      throw new Error(message);
-    }
-
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'split_by_external_reference_id.zip';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
+    const blob = await splitWorkbook(payload);
+    downloadBlob(blob, 'split_by_external_reference_id.zip');
 
     statusEl.textContent = 'Done. ZIP downloaded.';
   } catch (error) {
