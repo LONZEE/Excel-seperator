@@ -7,6 +7,11 @@ const idFilter = document.getElementById('idFilter');
 const headerFilter = document.getElementById('headerFilter');
 const searchInput = document.getElementById('searchInput');
 const filterMeta = document.getElementById('filterMeta');
+const columnOptions = document.getElementById('columnOptions');
+const showAllColumnsButton = document.getElementById('showAllColumns');
+const hideAllColumnsButton = document.getElementById('hideAllColumns');
+const presetIdColumnsButton = document.getElementById('presetIdColumns');
+const presetCustomerColumnsButton = document.getElementById('presetCustomerColumns');
 
 let previewData = null;
 let loadedFileKey = null;
@@ -162,15 +167,21 @@ function clearPreview() {
   idFilter.innerHTML = '';
   headerFilter.innerHTML = '';
   searchInput.value = '';
+  columnOptions.innerHTML = '';
   previewTable.innerHTML = '';
   previewSection.classList.add('hidden');
 }
 
 function renderTable(headers, rows) {
+  const visibleHeaders = headers.filter((header) => {
+    const checkbox = columnOptions.querySelector(`[data-header="${CSS.escape(header)}"]`);
+    return !checkbox || checkbox.checked;
+  });
+
   const thead = document.createElement('thead');
   const headRow = document.createElement('tr');
 
-  for (const header of headers) {
+  for (const header of visibleHeaders) {
     const th = document.createElement('th');
     th.textContent = header;
     headRow.appendChild(th);
@@ -181,7 +192,7 @@ function renderTable(headers, rows) {
   const tbody = document.createElement('tbody');
   for (const row of rows) {
     const tr = document.createElement('tr');
-    for (const header of headers) {
+    for (const header of visibleHeaders) {
       const td = document.createElement('td');
       td.textContent = String(row[header] ?? '');
       tr.appendChild(td);
@@ -192,6 +203,61 @@ function renderTable(headers, rows) {
   previewTable.innerHTML = '';
   previewTable.appendChild(thead);
   previewTable.appendChild(tbody);
+}
+
+function renderColumnOptions(headers) {
+  columnOptions.innerHTML = '';
+
+  for (const header of headers) {
+    const label = document.createElement('label');
+    label.className = 'columnOption';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = true;
+    checkbox.dataset.header = header;
+    checkbox.addEventListener('change', () => {
+      const checkedCount = columnOptions.querySelectorAll('input:checked').length;
+      if (!checkedCount) {
+        checkbox.checked = true;
+        return;
+      }
+      renderFilteredRows();
+    });
+
+    const text = document.createElement('span');
+    text.textContent = header;
+
+    label.appendChild(checkbox);
+    label.appendChild(text);
+    columnOptions.appendChild(label);
+  }
+}
+
+function setVisibleColumns(predicate) {
+  const checkboxes = Array.from(columnOptions.querySelectorAll('input[type="checkbox"]'));
+  let checkedCount = 0;
+
+  for (const checkbox of checkboxes) {
+    checkbox.checked = predicate(checkbox.dataset.header);
+    if (checkbox.checked) {
+      checkedCount += 1;
+    }
+  }
+
+  if (!checkedCount && checkboxes.length > 0) {
+    checkboxes[0].checked = true;
+  }
+
+  renderFilteredRows();
+}
+
+function isIdColumn(header) {
+  return /(id|reference|ref|number|code|key)/i.test(header);
+}
+
+function isCustomerColumn(header) {
+  return /(customer|member|client|account|person|name|email|phone|address|city|state|zip)/i.test(header);
 }
 
 function getFilteredRows(data, selectedId, selectedHeader, query) {
@@ -278,6 +344,7 @@ function renderPreview(payload) {
     headerFilter.appendChild(option);
   }
 
+  renderColumnOptions(payload.headers);
   idFilter.value = '__ALL__';
   headerFilter.value = '__ANY__';
   searchInput.value = '';
@@ -295,6 +362,22 @@ headerFilter.addEventListener('change', () => {
 
 searchInput.addEventListener('input', () => {
   renderFilteredRows();
+});
+
+showAllColumnsButton.addEventListener('click', () => {
+  setVisibleColumns(() => true);
+});
+
+hideAllColumnsButton.addEventListener('click', () => {
+  setVisibleColumns(() => false);
+});
+
+presetIdColumnsButton.addEventListener('click', () => {
+  setVisibleColumns((header) => isIdColumn(header));
+});
+
+presetCustomerColumnsButton.addEventListener('click', () => {
+  setVisibleColumns((header) => isCustomerColumn(header));
 });
 
 form.addEventListener('submit', async (event) => {

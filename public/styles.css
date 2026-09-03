@@ -87,6 +87,53 @@ button:hover {
   gap: 6px;
 }
 
+.columnPickerGroup {
+  gap: 10px;
+}
+
+.columnPickerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.columnPickerActions,
+.presetActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.columnPickerHeader button {
+  padding: 8px 10px;
+  font-size: 0.88rem;
+}
+
+.presetActions button {
+  padding: 8px 10px;
+  font-size: 0.88rem;
+}
+
+.columnOptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  max-height: 140px;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid #d4def1;
+  border-radius: 10px;
+  background: #fbfcff;
+}
+
+.columnOption {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 180px;
+}
+
 .previewControls label {
   font-weight: 600;
   color: #21344d;
@@ -157,12 +204,21 @@ tbody tr:nth-child(even) {
   button {
     width: 100%;
   }
+
+  .columnPickerActions,
+  .presetActions {
+    width: 100%;
+  }
 }
 
 @media (min-width: 900px) {
   .previewControls {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-items: end;
+  }
+
+  .columnPickerGroup {
+    grid-column: 1 / -1;
   }
 
   #filterMeta {

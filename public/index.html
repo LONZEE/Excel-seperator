@@ -41,6 +41,20 @@
               placeholder="Type to filter rows by selected header"
             />
           </div>
+          <div class="controlGroup columnPickerGroup">
+            <div class="columnPickerHeader">
+              <label>Visible Columns</label>
+              <div class="columnPickerActions">
+                <button type="button" id="showAllColumns">Show All</button>
+                <button type="button" id="hideAllColumns">Hide All</button>
+              </div>
+            </div>
+            <div class="presetActions">
+              <button type="button" id="presetIdColumns">IDs Only</button>
+              <button type="button" id="presetCustomerColumns">Customer Columns</button>
+            </div>
+            <div id="columnOptions" class="columnOptions"></div>
+          </div>
           <p id="filterMeta"></p>
         </div>
         <div class="tableWrap">
