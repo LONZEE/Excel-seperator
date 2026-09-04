@@ -40,14 +40,14 @@ const DEFAULT_GOOGLE_SHEET_WEBHOOK_URL = 'https://script.google.com/macros/s/AKf
 
 // Default commission percentages
 const DEFAULT_COMMISSIONS = {
-  'Nick': 50,
-  'Erick': 50,
-  'Tete': 50,
-  'Magali': 50,
-  'Sandra': 50,
-  'Jose': 50,
-  'Mario': 50,
-  'Anthony': 50
+  'Nick': 80,
+  'Erick': 75,
+  'Tete': 75,
+  'Magali': 75,
+  'Sandra': 75,
+  'Jose': 75,
+  'Mario': 60,
+  'Anthony': 60
 };
 
 // Load saved rates from localStorage if available
