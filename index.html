@@ -3,7 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Excel External Reference Id Splitter</title>
+    <title>Pump Nation Payroll Workspace</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet" />
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="public/styles.css" />
@@ -15,8 +18,9 @@
           <div class="d-flex align-items-center gap-3">
             <div class="app-mark"><i class="bi bi-file-earmark-spreadsheet"></i></div>
             <div>
-              <p class="eyebrow mb-1">PUMP NATION</p>
+              <p class="eyebrow mb-1">Pump Nation</p>
               <h1 class="h3 mb-0">Excel Report That I was Promised but Gen sent tech support</h1>
+              <p class="text-muted small mb-0 mt-1">Upload transactions, review trainer payouts, then sync to the master sheet.</p>
             </div>
           </div>
         </header>
@@ -49,14 +53,15 @@
         </section>
 
         <!-- PAYROLL & COMMISSION SECTION -->
-        <section class="payroll-panel mt-4 p-3 p-md-4 rounded shadow-sm border bg-white">
+        <section class="payroll-panel">
           <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 pb-3 border-bottom mb-3">
             <div>
-              <p class="eyebrow mb-1 text-success">PAYROLL ENGINE</p>
-              <h2 class="h4 mb-0"><i class="bi bi-cash-coin me-2"></i>Trainer Commission & Payouts</h2>
+              <p class="eyebrow mb-1">Payroll engine</p>
+              <h2 class="h4 mb-1">Trainer commission &amp; payouts</h2>
+              <p class="text-muted small mb-0">Auto-routes trainers, applies commission, adds group class pay.</p>
             </div>
             <div class="d-flex align-items-center gap-2">
-              <label for="payCycle" class="form-label mb-0 fw-bold text-nowrap">Pay Period Cycle:</label>
+              <label for="payCycle" class="form-label mb-0 text-nowrap">Pay period</label>
               <input type="text" id="payCycle" class="form-control form-control-sm" style="width: 170px;" value="8/21 - 9/3" placeholder="e.g. 8/21 - 9/3">
             </div>
           </div>
@@ -83,23 +88,23 @@
             </table>
           </div>
 
-          <div class="mt-4 pt-3 border-top bg-light p-3 rounded">
-            <div class="row g-3 align-items-center">
+          <div class="mt-4 pt-3 border-top bg-light p-3 p-md-4">
+            <div class="row g-3 align-items-end">
               <div class="col-lg-7">
-                <label for="googleWebhookUrl" class="form-label fw-bold mb-1"><i class="bi bi-google me-1 text-success"></i>Master Google Sheet Webhook URL (Optional Auto-Sync)</label>
-                <input type="url" id="googleWebhookUrl" class="form-control form-control-sm" placeholder="Paste your Google Apps Script Web App URL (ends in /exec)">
-                <small class="text-muted d-block mt-1">One-click appends this cycle's payroll rows to your Google Sheet master tab.</small>
+                <label for="googleWebhookUrl" class="form-label mb-1">Master Google Sheet webhook</label>
+                <input type="url" id="googleWebhookUrl" class="form-control form-control-sm" placeholder="Google Apps Script Web App URL (ends in /exec)">
+                <small class="text-muted d-block mt-1">Appends this cycle's payroll to the master tab in one click.</small>
               </div>
-              <div class="col-lg-5 text-lg-end">
+              <div class="col-lg-5">
                 <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
                   <button type="button" id="exportSummaryExcelBtn" class="btn btn-sm btn-outline-success">
-                    <i class="bi bi-file-earmark-excel me-1"></i>Download Payroll Summary (Excel)
+                    <i class="bi bi-file-earmark-excel me-1"></i>Download summary
                   </button>
                   <button type="button" id="syncGoogleSheetButton" class="btn btn-sm btn-success">
                     <i class="bi bi-cloud-arrow-up me-1"></i>Save to Google Sheet
                   </button>
                 </div>
-                <div id="syncStatus"></div>
+                <div id="syncStatus" class="mt-2 text-lg-end"></div>
               </div>
             </div>
           </div>
@@ -107,7 +112,7 @@
 
         <section id="previewSection" class="preview-panel hidden">
           <div class="panel-heading">
-            <p class="eyebrow mb-1">WORKBOOK PREVIEW</p>
+            <p class="eyebrow mb-1">Workbook preview</p>
             <h2 class="h4 mb-1">Explore your data</h2>
             <p id="previewMeta" class="preview-meta mb-0"></p>
           </div>

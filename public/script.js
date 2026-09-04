@@ -892,7 +892,7 @@ if (syncGoogleSheetButton) {
         body: JSON.stringify(postBody)
       });
 
-      syncStatusEl.textContent = `✓ Payroll for cycle "${cycle || 'Current'}" sent to Google Sheet! Check your master spreadsheet.`;
+      syncStatusEl.textContent = `Payroll for cycle "${cycle || 'Current'}" sent to Google Sheet. Check your master spreadsheet.`;
       syncStatusEl.className = 'text-success fw-bold small mt-2';
     } catch (err) {
       syncStatusEl.textContent = 'Error syncing to Google Sheet: ' + err.message;
