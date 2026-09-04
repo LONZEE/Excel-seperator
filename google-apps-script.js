@@ -30,10 +30,12 @@ function doPost(e) {
         "Transactions / Sessions",
         "Total Sales ($)",
         "Commission Rate (%)",
+        "Group Classes",
+        "Class Pay ($)",
         "Trainer Payout ($)",
         "Gym Net Retained ($)"
       ]);
-      summarySheet.getRange("A1:H1").setFontWeight("bold").setBackground("#d9ead3");
+      summarySheet.getRange("A1:J1").setFontWeight("bold").setBackground("#d9ead3");
       summarySheet.setFrozenRows(1);
     }
     
@@ -50,6 +52,8 @@ function doPost(e) {
           t.count,
           t.totalSales,
           t.commissionRate + "%",
+          t.classCount || 0,
+          t.classPay || 0,
           t.payout,
           t.gymRetained
         ]);
@@ -65,6 +69,8 @@ function doPost(e) {
         data.memberCount || 0,
         data.memberTotal,
         "0%",
+        0,
+        0,
         0,
         data.memberTotal
       ]);

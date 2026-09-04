@@ -73,6 +73,32 @@ function saveTrainerCommissionRate(trainer, rate) {
   }
 }
 
+// Flat dollar amount paid per group class taught
+const GROUP_CLASS_RATE = 15;
+
+// Group class counts are entered manually per pay period and saved per pay cycle
+function getTrainerClassCounts(cycle) {
+  try {
+    const saved = localStorage.getItem('trainer_class_counts_' + (cycle || ''));
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch {
+    // ignore
+  }
+  return {};
+}
+
+function saveTrainerClassCount(trainer, count, cycle) {
+  try {
+    const counts = getTrainerClassCounts(cycle);
+    counts[trainer] = Math.max(0, Math.floor(Number(count) || 0));
+    localStorage.setItem('trainer_class_counts_' + (cycle || ''), JSON.stringify(counts));
+  } catch {
+    // ignore
+  }
+}
+
 // Load saved Webhook URL if available
 function getSavedWebhookUrl() {
   try {
@@ -552,6 +578,8 @@ function renderPayrollSummary(payload) {
   commissionTableBody.innerHTML = '';
 
   const rates = getTrainerCommissionRates();
+  const cycle = payCycleInput ? payCycleInput.value.trim() : '';
+  const classCounts = getTrainerClassCounts(cycle);
   const amountCol = payload.amountHeader;
 
   // Aggregate stats per trainer + member
@@ -585,16 +613,23 @@ function renderPayrollSummary(payload) {
   let totalPayoutAllTrainers = 0;
   let totalSalesAllTrainers = 0;
   let totalSessionsAllTrainers = 0;
+  let totalClassesAllTrainers = 0;
+  let totalClassPayAllTrainers = 0;
 
   // Render each trainer row
   for (const trainer of HARD_SET_TRAINERS) {
     const item = stats.get(trainer.toLowerCase());
-    const payout = (item.totalSales * item.rate) / 100;
+    const classes = classCounts[trainer] || 0;
+    const classPay = classes * GROUP_CLASS_RATE;
+    const commissionPayout = (item.totalSales * item.rate) / 100;
+    const payout = commissionPayout + classPay;
     const gymRetained = item.totalSales - payout;
 
     totalPayoutAllTrainers += payout;
     totalSalesAllTrainers += item.totalSales;
     totalSessionsAllTrainers += item.count;
+    totalClassesAllTrainers += classes;
+    totalClassPayAllTrainers += classPay;
 
     const tr = document.createElement('tr');
     tr.innerHTML = `
@@ -607,6 +642,10 @@ function renderPayrollSummary(payload) {
           <span class="input-group-text">%</span>
         </div>
       </td>
+      <td class="text-center" style="max-width: 100px;">
+        <input type="number" min="0" step="1" class="form-control form-control-sm text-center trainer-class-input" data-trainer="${item.name}" value="${classes}" title="Group classes taught this pay period ($${GROUP_CLASS_RATE}/class)">
+      </td>
+      <td class="text-end">$${formatAmount(classPay)}</td>
       <td class="text-end text-success fw-bold">$${formatAmount(payout)}</td>
       <td class="text-end text-muted">$${formatAmount(gymRetained)}</td>
     `;
@@ -621,6 +660,8 @@ function renderPayrollSummary(payload) {
     <td class="text-center">${memberCount}</td>
     <td class="text-end">$${formatAmount(memberTotal)}</td>
     <td class="text-center text-muted">—</td>
+    <td class="text-center text-muted">—</td>
+    <td class="text-end text-muted">$0.00</td>
     <td class="text-end text-muted">$0.00</td>
     <td class="text-end fw-bold">$${formatAmount(memberTotal)}</td>
   `;
@@ -637,6 +678,8 @@ function renderPayrollSummary(payload) {
     <td class="text-center">${totalSessionsAllTrainers + memberCount}</td>
     <td class="text-end">$${formatAmount(grandTotalSales)}</td>
     <td class="text-center">—</td>
+    <td class="text-center">${totalClassesAllTrainers}</td>
+    <td class="text-end">$${formatAmount(totalClassPayAllTrainers)}</td>
     <td class="text-end text-success">$${formatAmount(totalPayoutAllTrainers)}</td>
     <td class="text-end text-primary">$${formatAmount(grandGymRetained)}</td>
   `;
@@ -649,6 +692,18 @@ function renderPayrollSummary(payload) {
       const tName = e.target.dataset.trainer;
       const newRate = Number(e.target.value) || 0;
       saveTrainerCommissionRate(tName, newRate);
+      renderPayrollSummary(payload);
+    });
+  });
+
+  // Attach listener to group class count inputs (manual entry, saved per pay cycle)
+  const classInputs = commissionTableBody.querySelectorAll('.trainer-class-input');
+  classInputs.forEach(input => {
+    input.addEventListener('change', (e) => {
+      const tName = e.target.dataset.trainer;
+      const newCount = Math.max(0, Math.floor(Number(e.target.value) || 0));
+      const activeCycle = payCycleInput ? payCycleInput.value.trim() : '';
+      saveTrainerClassCount(tName, newCount, activeCycle);
       renderPayrollSummary(payload);
     });
   });
@@ -700,6 +755,7 @@ function renderPreview(payload) {
 // Build Exportable Excel Summary Workbook
 function generatePayrollSummaryWorkbook(payload, cycle) {
   const rates = getTrainerCommissionRates();
+  const classCounts = getTrainerClassCounts(cycle);
   const amountCol = payload.amountHeader;
   const wb = XLSX.utils.book_new();
 
@@ -709,36 +765,42 @@ function generatePayrollSummaryWorkbook(payload, cycle) {
     ['Pay Cycle:', cycle || 'N/A'],
     ['Generated on:', new Date().toLocaleString()],
     ['', ''],
-    ['Trainer', 'Sessions/Txns', 'Total Sales ($)', 'Commission Rate', 'Trainer Payout ($)', 'Gym Retained ($)']
+    ['Trainer', 'Sessions/Txns', 'Total Sales ($)', 'Commission Rate', 'Group Classes', 'Class Pay ($)', 'Trainer Payout ($)', 'Gym Retained ($)']
   ];
 
   let totalSalesAll = 0;
   let totalPayoutAll = 0;
   let totalSessionsAll = 0;
+  let totalClassesAll = 0;
+  let totalClassPayAll = 0;
 
   for (const trainer of HARD_SET_TRAINERS) {
     const tRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === trainer);
     const count = tRows.length;
     const sales = tRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
     const rate = rates[trainer] !== undefined ? rates[trainer] : 50;
-    const payout = (sales * rate) / 100;
+    const classes = classCounts[trainer] || 0;
+    const classPay = classes * GROUP_CLASS_RATE;
+    const payout = ((sales * rate) / 100) + classPay;
     const gymRetained = sales - payout;
 
     totalSalesAll += sales;
     totalPayoutAll += payout;
     totalSessionsAll += count;
+    totalClassesAll += classes;
+    totalClassPayAll += classPay;
 
-    summaryRows.push([trainer, count, sales, `${rate}%`, payout, gymRetained]);
+    summaryRows.push([trainer, count, sales, `${rate}%`, classes, classPay, payout, gymRetained]);
   }
 
   // Member summary
   const memberRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === 'member');
   const memberCount = memberRows.length;
   const memberSales = memberRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
-  summaryRows.push(['member (General non-trainer sales)', memberCount, memberSales, '0%', 0, memberSales]);
+  summaryRows.push(['member (General non-trainer sales)', memberCount, memberSales, '0%', 0, 0, 0, memberSales]);
 
-  summaryRows.push(['', '', '', '', '', '']);
-  summaryRows.push(['TOTAL', totalSessionsAll + memberCount, totalSalesAll + memberSales, '', totalPayoutAll, (totalSalesAll + memberSales) - totalPayoutAll]);
+  summaryRows.push(['', '', '', '', '', '', '', '']);
+  summaryRows.push(['TOTAL', totalSessionsAll + memberCount, totalSalesAll + memberSales, '', totalClassesAll, totalClassPayAll, totalPayoutAll, (totalSalesAll + memberSales) - totalPayoutAll]);
 
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
   XLSX.utils.book_append_sheet(wb, summarySheet, 'Payroll Summary');
@@ -778,6 +840,7 @@ if (syncGoogleSheetButton) {
 
     const cycle = payCycleInput ? payCycleInput.value.trim() : '';
     const rates = getTrainerCommissionRates();
+    const classCounts = getTrainerClassCounts(cycle);
     const amountCol = previewData.amountHeader;
 
     const trainerPayload = [];
@@ -786,7 +849,9 @@ if (syncGoogleSheetButton) {
       const count = tRows.length;
       const sales = tRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
       const rate = rates[trainer] !== undefined ? rates[trainer] : 50;
-      const payout = (sales * rate) / 100;
+      const classes = classCounts[trainer] || 0;
+      const classPay = classes * GROUP_CLASS_RATE;
+      const payout = ((sales * rate) / 100) + classPay;
       const gymRetained = sales - payout;
 
       trainerPayload.push({
@@ -794,6 +859,8 @@ if (syncGoogleSheetButton) {
         count: count,
         totalSales: sales,
         commissionRate: rate,
+        classCount: classes,
+        classPay: classPay,
         payout: payout,
         gymRetained: gymRetained
       });
@@ -849,6 +916,13 @@ if (exportSummaryExcelBtn) {
     const safeCycle = sanitizeFileName(cycle.replace(/\//g, '-'));
     downloadBlob(blob, `Payroll_Summary_${safeCycle}.xlsx`);
     statusEl.textContent = `Downloaded Payroll Summary Excel for ${cycle}.`;
+  });
+}
+
+// Re-render payroll when the pay cycle changes so class counts match the period
+if (payCycleInput) {
+  payCycleInput.addEventListener('change', () => {
+    if (previewData) renderPayrollSummary(previewData);
   });
 }
 
