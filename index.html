@@ -48,6 +48,61 @@
           </div>
         </section>
 
+        <!-- PAYROLL & COMMISSION SECTION -->
+        <section class="payroll-panel mt-4 p-3 p-md-4 rounded shadow-sm border bg-white">
+          <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 pb-3 border-bottom mb-3">
+            <div>
+              <p class="eyebrow mb-1 text-success">PAYROLL ENGINE</p>
+              <h2 class="h4 mb-0"><i class="bi bi-cash-coin me-2"></i>Trainer Commission & Payouts</h2>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <label for="payCycle" class="form-label mb-0 fw-bold text-nowrap">Pay Period Cycle:</label>
+              <input type="text" id="payCycle" class="form-control form-control-sm" style="width: 170px;" value="8/21 - 9/3" placeholder="e.g. 8/21 - 9/3">
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle mb-0">
+              <thead class="table-light">
+                <tr>
+                  <th>Trainer / Group</th>
+                  <th class="text-center">Sessions / Txns</th>
+                  <th class="text-end">Gross Amount ($)</th>
+                  <th class="text-center" style="width: 130px;">Commission %</th>
+                  <th class="text-end">Trainer Payout ($)</th>
+                  <th class="text-end">Gym Retained ($)</th>
+                </tr>
+              </thead>
+              <tbody id="commissionTableBody">
+                <tr>
+                  <td colspan="6" class="text-center text-muted py-3">Upload or preview a report above to calculate trainer payouts automatically.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mt-4 pt-3 border-top bg-light p-3 rounded">
+            <div class="row g-3 align-items-center">
+              <div class="col-lg-7">
+                <label for="googleWebhookUrl" class="form-label fw-bold mb-1"><i class="bi bi-google me-1 text-success"></i>Master Google Sheet Webhook URL (Optional Auto-Sync)</label>
+                <input type="url" id="googleWebhookUrl" class="form-control form-control-sm" placeholder="Paste your Google Apps Script Web App URL (ends in /exec)">
+                <small class="text-muted d-block mt-1">One-click appends this cycle's payroll rows to your Google Sheet master tab.</small>
+              </div>
+              <div class="col-lg-5 text-lg-end">
+                <div class="d-flex flex-wrap gap-2 justify-content-lg-end">
+                  <button type="button" id="exportSummaryExcelBtn" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-file-earmark-excel me-1"></i>Download Payroll Summary (Excel)
+                  </button>
+                  <button type="button" id="syncGoogleSheetButton" class="btn btn-sm btn-success">
+                    <i class="bi bi-cloud-arrow-up me-1"></i>Save to Google Sheet
+                  </button>
+                </div>
+                <div id="syncStatus"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="previewSection" class="preview-panel hidden">
           <div class="panel-heading">
             <p class="eyebrow mb-1">WORKBOOK PREVIEW</p>

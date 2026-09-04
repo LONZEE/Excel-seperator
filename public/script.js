@@ -15,28 +15,125 @@ const presetCustomerColumnsButton = document.getElementById('presetCustomerColum
 const googleSheetUrlInput = document.getElementById('googleSheetUrl');
 const loadGoogleSheetButton = document.getElementById('loadGoogleSheet');
 
+// Payroll elements
+const payCycleInput = document.getElementById('payCycle');
+const commissionTableBody = document.getElementById('commissionTableBody');
+const syncGoogleSheetButton = document.getElementById('syncGoogleSheetButton');
+const googleWebhookUrlInput = document.getElementById('googleWebhookUrl');
+const syncStatusEl = document.getElementById('syncStatus');
+const exportSummaryExcelBtn = document.getElementById('exportSummaryExcelBtn');
+
+// Hard set list of trainers
+const HARD_SET_TRAINERS = [
+  'Nick',
+  'Erick',
+  'Tete',
+  'Magali',
+  'Sandra',
+  'Jose',
+  'Mario',
+  'Anthony'
+];
+
+// OPTIONAL: Hardcode your Google Sheet Web App URL here so you never have to paste it anywhere
+const DEFAULT_GOOGLE_SHEET_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxTOKCLNP4WhnM09AXqIha0V3SINIvfGfOYyW2-vK9mDSQJLeTASlNZ9_7SV0H2-8o7/exec';
+
+// Default commission percentages
+const DEFAULT_COMMISSIONS = {
+  'Nick': 50,
+  'Erick': 50,
+  'Tete': 50,
+  'Magali': 50,
+  'Sandra': 50,
+  'Jose': 50,
+  'Mario': 50,
+  'Anthony': 50
+};
+
+// Load saved rates from localStorage if available
+function getTrainerCommissionRates() {
+  try {
+    const saved = localStorage.getItem('trainer_commissions');
+    if (saved) {
+      return Object.assign({}, DEFAULT_COMMISSIONS, JSON.parse(saved));
+    }
+  } catch {
+    // ignore
+  }
+  return Object.assign({}, DEFAULT_COMMISSIONS);
+}
+
+function saveTrainerCommissionRate(trainer, rate) {
+  try {
+    const rates = getTrainerCommissionRates();
+    rates[trainer] = Number(rate) || 0;
+    localStorage.setItem('trainer_commissions', JSON.stringify(rates));
+  } catch {
+    // ignore
+  }
+}
+
+// Load saved Webhook URL if available
+function getSavedWebhookUrl() {
+  try {
+    return localStorage.getItem('google_sheet_webhook_url') || DEFAULT_GOOGLE_SHEET_WEBHOOK_URL;
+  } catch {
+    return DEFAULT_GOOGLE_SHEET_WEBHOOK_URL;
+  }
+}
+
+function saveWebhookUrl(url) {
+  try {
+    localStorage.setItem('google_sheet_webhook_url', url.trim());
+  } catch {
+    // ignore
+  }
+}
+
+if (googleWebhookUrlInput) {
+  googleWebhookUrlInput.value = getSavedWebhookUrl();
+  googleWebhookUrlInput.addEventListener('change', () => {
+    saveWebhookUrl(googleWebhookUrlInput.value);
+  });
+}
+
+// Map trainer names for case-insensitive lookup
+const TRAINER_LOOKUP = new Map();
+for (const trainer of HARD_SET_TRAINERS) {
+  TRAINER_LOOKUP.set(trainer.trim().toLowerCase(), trainer.trim());
+}
+
 let previewData = null;
 let loadedFileKey = null;
 
-function normalizeExternalReferenceValue(value) {
+/**
+ * Categorizes an External Reference Id value:
+ * If it matches one of the hard-set trainers (case-insensitive), returns the canonical Trainer name.
+ * Otherwise, it automatically routes into "member".
+ */
+function routeExternalReferenceId(value) {
   const raw = String(value || '').trim();
   if (!raw) {
-    return 'missing_external_reference_id';
-  }
-  return raw.toLowerCase();
-}
-
-function formatExternalReferenceValue(value) {
-  const raw = String(value || '').trim();
-  if (!raw) {
-    return 'MISSING_EXTERNAL_REFERENCE_ID';
+    return {
+      key: 'member',
+      label: 'member'
+    };
   }
 
-  if (/^\d+(\.\d+)?$/.test(raw)) {
-    return raw;
+  const normalized = raw.toLowerCase();
+  if (TRAINER_LOOKUP.has(normalized)) {
+    const canonical = TRAINER_LOOKUP.get(normalized);
+    return {
+      key: canonical.toLowerCase(),
+      label: canonical
+    };
   }
 
-  return raw.toLowerCase();
+  // Any other value (numbers, missing, unlisted name, etc.) goes to member
+  return {
+    key: 'member',
+    label: 'member'
+  };
 }
 
 function sanitizeFileName(value) {
@@ -119,26 +216,38 @@ function createPreviewData(workbook, sourceName) {
     throw new Error('Could not find a column named External Reference Id.');
   }
 
+  // Identify the primary amount column if present
+  const amountHeader = headers.find((h) => /^amount$/i.test(h)) ||
+                       headers.find((h) => isSummableMoneyColumn(h)) || null;
+
   const idGroups = new Map();
 
   for (const row of rows) {
-    const key = normalizeExternalReferenceValue(row[targetHeader]);
-    const label = formatExternalReferenceValue(row[targetHeader]);
+    const routed = routeExternalReferenceId(row[targetHeader]);
+    row._assignedGroup = routed.label;
 
-    if (!idGroups.has(key)) {
-      idGroups.set(key, { key, label, count: 0 });
+    if (!idGroups.has(routed.key)) {
+      idGroups.set(routed.key, { key: routed.key, label: routed.label, count: 0 });
     }
 
-    idGroups.get(key).count += 1;
+    idGroups.get(routed.key).count += 1;
   }
+
+  // Sort: Trainers first alphabetically, then "member" at the end
+  const sortedGroups = Array.from(idGroups.values()).sort((a, b) => {
+    if (a.key === 'member') return 1;
+    if (b.key === 'member') return -1;
+    return a.label.localeCompare(b.label);
+  });
 
   return {
     sheetName: sourceName || firstSheetName,
     totalRows: rows.length,
     uniqueExternalReferenceIds: idGroups.size,
     targetHeader,
+    amountHeader,
     headers,
-    externalReferenceIds: Array.from(idGroups.values()).sort((a, b) => a.label.localeCompare(b.label)),
+    externalReferenceIds: sortedGroups,
     rows
   };
 }
@@ -227,14 +336,13 @@ async function splitWorkbook(payload) {
   const grouped = new Map();
 
   for (const row of payload.rows) {
-    const key = normalizeExternalReferenceValue(row[payload.targetHeader]);
-    const label = formatExternalReferenceValue(row[payload.targetHeader]);
+    const routed = routeExternalReferenceId(row[payload.targetHeader]);
 
-    if (!grouped.has(key)) {
-      grouped.set(key, { label, rows: [] });
+    if (!grouped.has(routed.key)) {
+      grouped.set(routed.key, { label: routed.label, rows: [] });
     }
 
-    grouped.get(key).rows.push(row);
+    grouped.get(routed.key).rows.push(row);
   }
 
   const zip = new JSZip();
@@ -265,6 +373,7 @@ function clearPreview() {
   searchInput.value = '';
   columnOptions.innerHTML = '';
   previewTable.innerHTML = '';
+  if (commissionTableBody) commissionTableBody.innerHTML = '';
   previewSection.classList.add('hidden');
 }
 
@@ -388,9 +497,10 @@ function getFilteredRows(data, selectedId, selectedHeader, query) {
   const normalizedQuery = String(query || '').trim().toLowerCase();
 
   return data.rows.filter((row) => {
+    const routed = routeExternalReferenceId(row[data.targetHeader]);
     const idMatches =
       selectedId === '__ALL__' ||
-      normalizeExternalReferenceValue(row[data.targetHeader]) === selectedId;
+      routed.key === selectedId;
 
     if (!idMatches) {
       return false;
@@ -426,7 +536,7 @@ function renderFilteredRows() {
   renderTable(previewData.headers, rows);
 
   const idText =
-    selectedId === '__ALL__' ? 'all External Reference Ids' : `External Reference Id: ${selectedId}`;
+    selectedId === '__ALL__' ? 'all Assigned Groups' : `Group: ${selectedId}`;
   const headerText =
     selectedHeader === '__ANY__' ? 'all headers' : `header: ${selectedHeader}`;
   const queryText = query.trim() ? `query: "${query.trim()}"` : 'no text filter';
@@ -434,17 +544,127 @@ function renderFilteredRows() {
   filterMeta.textContent = `Showing ${rows.length} rows (${idText}, ${headerText}, ${queryText}).`;
 }
 
+/**
+ * Calculates and renders the Payroll & Commission Summary Card
+ */
+function renderPayrollSummary(payload) {
+  if (!commissionTableBody) return;
+  commissionTableBody.innerHTML = '';
+
+  const rates = getTrainerCommissionRates();
+  const amountCol = payload.amountHeader;
+
+  // Aggregate stats per trainer + member
+  const stats = new Map();
+  for (const trainer of HARD_SET_TRAINERS) {
+    stats.set(trainer.toLowerCase(), {
+      name: trainer,
+      count: 0,
+      totalSales: 0,
+      rate: rates[trainer] !== undefined ? rates[trainer] : 50
+    });
+  }
+
+  let memberCount = 0;
+  let memberTotal = 0;
+
+  for (const row of payload.rows) {
+    const routed = routeExternalReferenceId(row[payload.targetHeader]);
+    const val = amountCol ? (parseNumericValue(row[amountCol]) || 0) : 0;
+
+    if (stats.has(routed.key)) {
+      const item = stats.get(routed.key);
+      item.count += 1;
+      item.totalSales += val;
+    } else {
+      memberCount += 1;
+      memberTotal += val;
+    }
+  }
+
+  let totalPayoutAllTrainers = 0;
+  let totalSalesAllTrainers = 0;
+  let totalSessionsAllTrainers = 0;
+
+  // Render each trainer row
+  for (const trainer of HARD_SET_TRAINERS) {
+    const item = stats.get(trainer.toLowerCase());
+    const payout = (item.totalSales * item.rate) / 100;
+    const gymRetained = item.totalSales - payout;
+
+    totalPayoutAllTrainers += payout;
+    totalSalesAllTrainers += item.totalSales;
+    totalSessionsAllTrainers += item.count;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><strong>${item.name}</strong></td>
+      <td class="text-center">${item.count}</td>
+      <td class="text-end">$${formatAmount(item.totalSales)}</td>
+      <td class="text-center" style="max-width: 110px;">
+        <div class="input-group input-group-sm">
+          <input type="number" min="0" max="100" step="1" class="form-control text-center trainer-rate-input" data-trainer="${item.name}" value="${item.rate}">
+          <span class="input-group-text">%</span>
+        </div>
+      </td>
+      <td class="text-end text-success fw-bold">$${formatAmount(payout)}</td>
+      <td class="text-end text-muted">$${formatAmount(gymRetained)}</td>
+    `;
+    commissionTableBody.appendChild(tr);
+  }
+
+  // Member row
+  const trMember = document.createElement('tr');
+  trMember.className = 'table-light';
+  trMember.innerHTML = `
+    <td><span class="badge bg-secondary">member</span> <small class="text-muted">(General non-trainer sales)</small></td>
+    <td class="text-center">${memberCount}</td>
+    <td class="text-end">$${formatAmount(memberTotal)}</td>
+    <td class="text-center text-muted">—</td>
+    <td class="text-end text-muted">$0.00</td>
+    <td class="text-end fw-bold">$${formatAmount(memberTotal)}</td>
+  `;
+  commissionTableBody.appendChild(trMember);
+
+  // Grand total row
+  const grandTotalSales = totalSalesAllTrainers + memberTotal;
+  const grandGymRetained = grandTotalSales - totalPayoutAllTrainers;
+
+  const trTotal = document.createElement('tr');
+  trTotal.className = 'table-primary fw-bold';
+  trTotal.innerHTML = `
+    <td>TOTAL PAYROLL SUMMARY</td>
+    <td class="text-center">${totalSessionsAllTrainers + memberCount}</td>
+    <td class="text-end">$${formatAmount(grandTotalSales)}</td>
+    <td class="text-center">—</td>
+    <td class="text-end text-success">$${formatAmount(totalPayoutAllTrainers)}</td>
+    <td class="text-end text-primary">$${formatAmount(grandGymRetained)}</td>
+  `;
+  commissionTableBody.appendChild(trTotal);
+
+  // Attach listener to rate inputs
+  const rateInputs = commissionTableBody.querySelectorAll('.trainer-rate-input');
+  rateInputs.forEach(input => {
+    input.addEventListener('change', (e) => {
+      const tName = e.target.dataset.trainer;
+      const newRate = Number(e.target.value) || 0;
+      saveTrainerCommissionRate(tName, newRate);
+      renderPayrollSummary(payload);
+    });
+  });
+}
+
 function renderPreview(payload) {
   const { totalRows, uniqueExternalReferenceIds, targetHeader, sheetName, externalReferenceIds } = payload;
 
   previewData = payload;
-  previewMeta.textContent = `Sheet: ${sheetName} | Rows: ${totalRows} | Unique External Reference Ids: ${uniqueExternalReferenceIds} | Matched Column: ${targetHeader}`;
+  previewMeta.textContent = `Sheet: ${sheetName} | Total Rows: ${totalRows} | Groups: ${uniqueExternalReferenceIds} (Hard-set Trainers + member catch-all) | Column: ${targetHeader}`;
 
   idFilter.innerHTML = '';
 
   const allOption = document.createElement('option');
   allOption.value = '__ALL__';
-  allOption.textContent = 'All External Reference Ids';
+  allOption.textContent = 'All Assigned Groups';
   idFilter.appendChild(allOption);
 
   for (const id of externalReferenceIds) {
@@ -473,7 +693,163 @@ function renderPreview(payload) {
   headerFilter.value = '__ANY__';
   searchInput.value = '';
   renderFilteredRows();
+  renderPayrollSummary(payload);
   previewSection.classList.remove('hidden');
+}
+
+// Build Exportable Excel Summary Workbook
+function generatePayrollSummaryWorkbook(payload, cycle) {
+  const rates = getTrainerCommissionRates();
+  const amountCol = payload.amountHeader;
+  const wb = XLSX.utils.book_new();
+
+  // Tab 1: Summary Sheet
+  const summaryRows = [
+    ['PAYROLL & COMMISSION SUMMARY', ''],
+    ['Pay Cycle:', cycle || 'N/A'],
+    ['Generated on:', new Date().toLocaleString()],
+    ['', ''],
+    ['Trainer', 'Sessions/Txns', 'Total Sales ($)', 'Commission Rate', 'Trainer Payout ($)', 'Gym Retained ($)']
+  ];
+
+  let totalSalesAll = 0;
+  let totalPayoutAll = 0;
+  let totalSessionsAll = 0;
+
+  for (const trainer of HARD_SET_TRAINERS) {
+    const tRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === trainer);
+    const count = tRows.length;
+    const sales = tRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
+    const rate = rates[trainer] !== undefined ? rates[trainer] : 50;
+    const payout = (sales * rate) / 100;
+    const gymRetained = sales - payout;
+
+    totalSalesAll += sales;
+    totalPayoutAll += payout;
+    totalSessionsAll += count;
+
+    summaryRows.push([trainer, count, sales, `${rate}%`, payout, gymRetained]);
+  }
+
+  // Member summary
+  const memberRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === 'member');
+  const memberCount = memberRows.length;
+  const memberSales = memberRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
+  summaryRows.push(['member (General non-trainer sales)', memberCount, memberSales, '0%', 0, memberSales]);
+
+  summaryRows.push(['', '', '', '', '', '']);
+  summaryRows.push(['TOTAL', totalSessionsAll + memberCount, totalSalesAll + memberSales, '', totalPayoutAll, (totalSalesAll + memberSales) - totalPayoutAll]);
+
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Payroll Summary');
+
+  // Individual tabs for each trainer + member
+  for (const trainer of HARD_SET_TRAINERS) {
+    const tRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === trainer);
+    if (tRows.length) {
+      const sheet = XLSX.utils.json_to_sheet(tRows);
+      XLSX.utils.book_append_sheet(wb, sheet, trainer);
+    }
+  }
+
+  if (memberRows.length) {
+    const mSheet = XLSX.utils.json_to_sheet(memberRows);
+    XLSX.utils.book_append_sheet(wb, mSheet, 'member');
+  }
+
+  return wb;
+}
+
+// Sync to Master Google Sheet via Webhook (Apps Script)
+if (syncGoogleSheetButton) {
+  syncGoogleSheetButton.addEventListener('click', async () => {
+    if (!previewData) {
+      syncStatusEl.textContent = 'Please load a workbook first.';
+      syncStatusEl.className = 'text-danger small mt-2';
+      return;
+    }
+
+    const webhookUrl = (googleWebhookUrlInput ? googleWebhookUrlInput.value.trim() : '') || getSavedWebhookUrl();
+    if (!webhookUrl) {
+      syncStatusEl.textContent = 'Please provide a Google Apps Script Web App URL first.';
+      syncStatusEl.className = 'text-danger small mt-2';
+      return;
+    }
+
+    const cycle = payCycleInput ? payCycleInput.value.trim() : '';
+    const rates = getTrainerCommissionRates();
+    const amountCol = previewData.amountHeader;
+
+    const trainerPayload = [];
+    for (const trainer of HARD_SET_TRAINERS) {
+      const tRows = previewData.rows.filter(r => routeExternalReferenceId(r[previewData.targetHeader]).label === trainer);
+      const count = tRows.length;
+      const sales = tRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
+      const rate = rates[trainer] !== undefined ? rates[trainer] : 50;
+      const payout = (sales * rate) / 100;
+      const gymRetained = sales - payout;
+
+      trainerPayload.push({
+        name: trainer,
+        count: count,
+        totalSales: sales,
+        commissionRate: rate,
+        payout: payout,
+        gymRetained: gymRetained
+      });
+    }
+
+    const memberRows = previewData.rows.filter(r => routeExternalReferenceId(r[previewData.targetHeader]).label === 'member');
+    const memberCount = memberRows.length;
+    const memberTotal = memberRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
+
+    const postBody = {
+      payCycle: cycle || 'Current Cycle',
+      trainers: trainerPayload,
+      memberCount: memberCount,
+      memberTotal: memberTotal,
+      headers: previewData.headers,
+      rawTransactions: previewData.rows
+    };
+
+    syncStatusEl.textContent = 'Saving to Master Google Sheet...';
+    syncStatusEl.className = 'text-primary small mt-2';
+
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        mode: 'no-cors', // allows cross-origin submission to Apps Script without CORS blockage
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(postBody)
+      });
+
+      syncStatusEl.textContent = `✓ Payroll for cycle "${cycle || 'Current'}" sent to Google Sheet! Check your master spreadsheet.`;
+      syncStatusEl.className = 'text-success fw-bold small mt-2';
+    } catch (err) {
+      syncStatusEl.textContent = 'Error syncing to Google Sheet: ' + err.message;
+      syncStatusEl.className = 'text-danger small mt-2';
+    }
+  });
+}
+
+// Export formatted Excel Summary workbook button
+if (exportSummaryExcelBtn) {
+  exportSummaryExcelBtn.addEventListener('click', () => {
+    if (!previewData) {
+      statusEl.textContent = 'Please load a workbook first.';
+      return;
+    }
+
+    const cycle = payCycleInput ? payCycleInput.value.trim() : 'Payroll';
+    const wb = generatePayrollSummaryWorkbook(previewData, cycle);
+    const output = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+    const blob = new Blob([output], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const safeCycle = sanitizeFileName(cycle.replace(/\//g, '-'));
+    downloadBlob(blob, `Payroll_Summary_${safeCycle}.xlsx`);
+    statusEl.textContent = `Downloaded Payroll Summary Excel for ${cycle}.`;
+  });
 }
 
 idFilter.addEventListener('change', () => {
