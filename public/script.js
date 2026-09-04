@@ -904,10 +904,10 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
 
   const fileInput = document.getElementById('excelFile');
-  const file = fileInput.files[0];
+  const file = fileInput && fileInput.files ? fileInput.files[0] : null;
 
-  if (!file) {
-    statusEl.textContent = 'Pick a file first.';
+  if (!file && !previewData) {
+    statusEl.textContent = 'Please choose a file or click "Load sheet" above first.';
     return;
   }
 
@@ -915,7 +915,15 @@ form.addEventListener('submit', async (event) => {
   statusEl.textContent = action === 'preview' ? 'Loading preview...' : 'Processing...';
 
   try {
-    const payload = await loadWorkbookData(file);
+    let payload = previewData;
+
+    if (file) {
+      payload = await loadWorkbookData(file);
+    }
+
+    if (!payload) {
+      throw new Error('No data loaded. Choose a file or load a Google Sheet first.');
+    }
 
     if (action === 'preview') {
       renderPreview(payload);
