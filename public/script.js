@@ -169,9 +169,23 @@ function routeExternalReferenceId(value, amountValue) {
 }
 
 function routeTransaction(row, targetHeader, amountHeader) {
+  const headers = Object.keys(row);
+  const transactionHeader = headers.find((header) =>
+    String(header).trim().toLowerCase().replace(/[^a-z0-9]/g, '') === 'transaction'
+  );
+  const responseCodeHeader = headers.find((header) =>
+    String(header).trim().toLowerCase().replace(/[^a-z0-9]/g, '') === 'responsecode'
+  );
+  const amount = amountHeader ? parseNumericValue(row[amountHeader]) : null;
+  const transactionType = transactionHeader ? String(row[transactionHeader]).trim().toUpperCase() : '';
+  const responseCode = responseCodeHeader ? String(row[responseCodeHeader]).trim() : '';
+  const isFridgeItemSale = amount > 0 && amount < 20 &&
+    (!transactionHeader || transactionType === 'SALE') &&
+    (!responseCodeHeader || responseCode === '00');
+
   return routeExternalReferenceId(
     row[targetHeader],
-    amountHeader ? row[amountHeader] : null
+    isFridgeItemSale ? amount : null
   );
 }
 
