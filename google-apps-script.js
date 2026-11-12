@@ -75,6 +75,22 @@ function doPost(e) {
         data.memberTotal
       ]);
     }
+
+    // Append fridge item sales rollup when provided by the browser app
+    if (data.fridgeItemTotal !== undefined) {
+      summarySheet.appendRow([
+        timestamp,
+        cycle,
+        "Fridge Items",
+        data.fridgeItemCount || 0,
+        data.fridgeItemTotal,
+        "0%",
+        0,
+        0,
+        0,
+        data.fridgeItemTotal
+      ]);
+    }
     
     // 2. Optionally create/update a tab for the current pay cycle with all raw transactions
     if (data.rawTransactions && data.rawTransactions.length) {

@@ -31,8 +31,7 @@ const HARD_SET_TRAINERS = [
   'Magali',
   'Sandra',
   'Jose',
-  'Mario',
-  'Anthony'
+  'Mario'
 ];
 
 // OPTIONAL: Hardcode your Google Sheet Web App URL here so you never have to paste it anywhere
@@ -46,8 +45,7 @@ const DEFAULT_COMMISSIONS = {
   'Magali': 75,
   'Sandra': 75,
   'Jose': 75,
-  'Mario': 60,
-  'Anthony': 60
+  'Mario': 60
 };
 
 // Load saved rates from localStorage if available
@@ -137,7 +135,15 @@ let loadedFileKey = null;
  * If it matches one of the hard-set trainers (case-insensitive), returns the canonical Trainer name.
  * Otherwise, it automatically routes into "member".
  */
-function routeExternalReferenceId(value) {
+function routeExternalReferenceId(value, amountValue) {
+  const amount = parseNumericValue(amountValue);
+  if (amount !== null && amount < 20) {
+    return {
+      key: 'fridge-items',
+      label: 'Fridge Items'
+    };
+  }
+
   const raw = String(value || '').trim();
   if (!raw) {
     return {
@@ -160,6 +166,13 @@ function routeExternalReferenceId(value) {
     key: 'member',
     label: 'member'
   };
+}
+
+function routeTransaction(row, targetHeader, amountHeader) {
+  return routeExternalReferenceId(
+    row[targetHeader],
+    amountHeader ? row[amountHeader] : null
+  );
 }
 
 function sanitizeFileName(value) {
@@ -249,7 +262,7 @@ function createPreviewData(workbook, sourceName) {
   const idGroups = new Map();
 
   for (const row of rows) {
-    const routed = routeExternalReferenceId(row[targetHeader]);
+    const routed = routeTransaction(row, targetHeader, amountHeader);
     row._assignedGroup = routed.label;
 
     if (!idGroups.has(routed.key)) {
@@ -259,7 +272,7 @@ function createPreviewData(workbook, sourceName) {
     idGroups.get(routed.key).count += 1;
   }
 
-  // Sort: Trainers first alphabetically, then "member" at the end
+  // Sort: Named groups first, with member last.
   const sortedGroups = Array.from(idGroups.values()).sort((a, b) => {
     if (a.key === 'member') return 1;
     if (b.key === 'member') return -1;
@@ -362,7 +375,7 @@ async function splitWorkbook(payload) {
   const grouped = new Map();
 
   for (const row of payload.rows) {
-    const routed = routeExternalReferenceId(row[payload.targetHeader]);
+    const routed = routeTransaction(row, payload.targetHeader, payload.amountHeader);
 
     if (!grouped.has(routed.key)) {
       grouped.set(routed.key, { label: routed.label, rows: [] });
@@ -523,7 +536,7 @@ function getFilteredRows(data, selectedId, selectedHeader, query) {
   const normalizedQuery = String(query || '').trim().toLowerCase();
 
   return data.rows.filter((row) => {
-    const routed = routeExternalReferenceId(row[data.targetHeader]);
+    const routed = routeTransaction(row, data.targetHeader, data.amountHeader);
     const idMatches =
       selectedId === '__ALL__' ||
       routed.key === selectedId;
@@ -595,15 +608,20 @@ function renderPayrollSummary(payload) {
 
   let memberCount = 0;
   let memberTotal = 0;
+  let fridgeItemCount = 0;
+  let fridgeItemTotal = 0;
 
   for (const row of payload.rows) {
-    const routed = routeExternalReferenceId(row[payload.targetHeader]);
+    const routed = routeTransaction(row, payload.targetHeader, amountCol);
     const val = amountCol ? (parseNumericValue(row[amountCol]) || 0) : 0;
 
     if (stats.has(routed.key)) {
       const item = stats.get(routed.key);
       item.count += 1;
       item.totalSales += val;
+    } else if (routed.key === 'fridge-items') {
+      fridgeItemCount += 1;
+      fridgeItemTotal += val;
     } else {
       memberCount += 1;
       memberTotal += val;
@@ -667,15 +685,29 @@ function renderPayrollSummary(payload) {
   `;
   commissionTableBody.appendChild(trMember);
 
+  const trFridgeItems = document.createElement('tr');
+  trFridgeItems.className = 'table-light';
+  trFridgeItems.innerHTML = `
+    <td><span class="badge bg-info text-dark">Fridge Items</span> <small class="text-muted">(Transactions under $20)</small></td>
+    <td class="text-center">${fridgeItemCount}</td>
+    <td class="text-end">$${formatAmount(fridgeItemTotal)}</td>
+    <td class="text-center text-muted">—</td>
+    <td class="text-center text-muted">—</td>
+    <td class="text-end text-muted">$0.00</td>
+    <td class="text-end text-muted">$0.00</td>
+    <td class="text-end fw-bold">$${formatAmount(fridgeItemTotal)}</td>
+  `;
+  commissionTableBody.appendChild(trFridgeItems);
+
   // Grand total row
-  const grandTotalSales = totalSalesAllTrainers + memberTotal;
+  const grandTotalSales = totalSalesAllTrainers + memberTotal + fridgeItemTotal;
   const grandGymRetained = grandTotalSales - totalPayoutAllTrainers;
 
   const trTotal = document.createElement('tr');
   trTotal.className = 'table-primary fw-bold';
   trTotal.innerHTML = `
     <td>TOTAL PAYROLL SUMMARY</td>
-    <td class="text-center">${totalSessionsAllTrainers + memberCount}</td>
+    <td class="text-center">${totalSessionsAllTrainers + memberCount + fridgeItemCount}</td>
     <td class="text-end">$${formatAmount(grandTotalSales)}</td>
     <td class="text-center">—</td>
     <td class="text-center">${totalClassesAllTrainers}</td>
@@ -713,7 +745,7 @@ function renderPreview(payload) {
   const { totalRows, uniqueExternalReferenceIds, targetHeader, sheetName, externalReferenceIds } = payload;
 
   previewData = payload;
-  previewMeta.textContent = `Sheet: ${sheetName} | Total Rows: ${totalRows} | Groups: ${uniqueExternalReferenceIds} (Hard-set Trainers + member catch-all) | Column: ${targetHeader}`;
+  previewMeta.textContent = `Sheet: ${sheetName} | Total Rows: ${totalRows} | Groups: ${uniqueExternalReferenceIds} (Trainers, Fridge Items, and member catch-all) | Column: ${targetHeader}`;
 
   idFilter.innerHTML = '';
 
@@ -765,7 +797,7 @@ function generatePayrollSummaryWorkbook(payload, cycle) {
     ['Pay Cycle:', cycle || 'N/A'],
     ['Generated on:', new Date().toLocaleString()],
     ['', ''],
-    ['Trainer', 'Sessions/Txns', 'Total Sales ($)', 'Commission Rate', 'Group Classes', 'Class Pay ($)', 'Trainer Payout ($)', 'Gym Retained ($)']
+    ['Trainer / Group', 'Sessions/Txns', 'Total Sales ($)', 'Commission Rate', 'Group Classes', 'Class Pay ($)', 'Trainer Payout ($)', 'Gym Retained ($)']
   ];
 
   let totalSalesAll = 0;
@@ -775,7 +807,7 @@ function generatePayrollSummaryWorkbook(payload, cycle) {
   let totalClassPayAll = 0;
 
   for (const trainer of HARD_SET_TRAINERS) {
-    const tRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === trainer);
+    const tRows = payload.rows.filter(r => routeTransaction(r, payload.targetHeader, amountCol).label === trainer);
     const count = tRows.length;
     const sales = tRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
     const rate = rates[trainer] !== undefined ? rates[trainer] : 50;
@@ -794,20 +826,25 @@ function generatePayrollSummaryWorkbook(payload, cycle) {
   }
 
   // Member summary
-  const memberRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === 'member');
+  const memberRows = payload.rows.filter(r => routeTransaction(r, payload.targetHeader, amountCol).label === 'member');
   const memberCount = memberRows.length;
   const memberSales = memberRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
   summaryRows.push(['member (General non-trainer sales)', memberCount, memberSales, '0%', 0, 0, 0, memberSales]);
 
+  const fridgeItemRows = payload.rows.filter(r => routeTransaction(r, payload.targetHeader, amountCol).key === 'fridge-items');
+  const fridgeItemCount = fridgeItemRows.length;
+  const fridgeItemSales = fridgeItemRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
+  summaryRows.push(['Fridge Items', fridgeItemCount, fridgeItemSales, '0%', 0, 0, 0, fridgeItemSales]);
+
   summaryRows.push(['', '', '', '', '', '', '', '']);
-  summaryRows.push(['TOTAL', totalSessionsAll + memberCount, totalSalesAll + memberSales, '', totalClassesAll, totalClassPayAll, totalPayoutAll, (totalSalesAll + memberSales) - totalPayoutAll]);
+  summaryRows.push(['TOTAL', totalSessionsAll + memberCount + fridgeItemCount, totalSalesAll + memberSales + fridgeItemSales, '', totalClassesAll, totalClassPayAll, totalPayoutAll, (totalSalesAll + memberSales + fridgeItemSales) - totalPayoutAll]);
 
   const summarySheet = XLSX.utils.aoa_to_sheet(summaryRows);
   XLSX.utils.book_append_sheet(wb, summarySheet, 'Payroll Summary');
 
   // Individual tabs for each trainer + member
   for (const trainer of HARD_SET_TRAINERS) {
-    const tRows = payload.rows.filter(r => routeExternalReferenceId(r[payload.targetHeader]).label === trainer);
+    const tRows = payload.rows.filter(r => routeTransaction(r, payload.targetHeader, amountCol).label === trainer);
     if (tRows.length) {
       const sheet = XLSX.utils.json_to_sheet(tRows);
       XLSX.utils.book_append_sheet(wb, sheet, trainer);
@@ -817,6 +854,11 @@ function generatePayrollSummaryWorkbook(payload, cycle) {
   if (memberRows.length) {
     const mSheet = XLSX.utils.json_to_sheet(memberRows);
     XLSX.utils.book_append_sheet(wb, mSheet, 'member');
+  }
+
+  if (fridgeItemRows.length) {
+    const fridgeSheet = XLSX.utils.json_to_sheet(fridgeItemRows);
+    XLSX.utils.book_append_sheet(wb, fridgeSheet, 'Fridge Items');
   }
 
   return wb;
@@ -845,7 +887,7 @@ if (syncGoogleSheetButton) {
 
     const trainerPayload = [];
     for (const trainer of HARD_SET_TRAINERS) {
-      const tRows = previewData.rows.filter(r => routeExternalReferenceId(r[previewData.targetHeader]).label === trainer);
+      const tRows = previewData.rows.filter(r => routeTransaction(r, previewData.targetHeader, amountCol).label === trainer);
       const count = tRows.length;
       const sales = tRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
       const rate = rates[trainer] !== undefined ? rates[trainer] : 50;
@@ -866,15 +908,21 @@ if (syncGoogleSheetButton) {
       });
     }
 
-    const memberRows = previewData.rows.filter(r => routeExternalReferenceId(r[previewData.targetHeader]).label === 'member');
+    const memberRows = previewData.rows.filter(r => routeTransaction(r, previewData.targetHeader, amountCol).label === 'member');
     const memberCount = memberRows.length;
     const memberTotal = memberRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
+
+    const fridgeItemRows = previewData.rows.filter(r => routeTransaction(r, previewData.targetHeader, amountCol).key === 'fridge-items');
+    const fridgeItemCount = fridgeItemRows.length;
+    const fridgeItemTotal = fridgeItemRows.reduce((sum, r) => sum + (amountCol ? (parseNumericValue(r[amountCol]) || 0) : 0), 0);
 
     const postBody = {
       payCycle: cycle || 'Current Cycle',
       trainers: trainerPayload,
       memberCount: memberCount,
       memberTotal: memberTotal,
+      fridgeItemCount: fridgeItemCount,
+      fridgeItemTotal: fridgeItemTotal,
       headers: previewData.headers,
       rawTransactions: previewData.rows
     };
